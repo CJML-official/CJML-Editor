@@ -1,0 +1,60 @@
+import React, { FC } from 'react';
+import { Arrow, Group, Rect } from 'react-konva';
+import { CJMLArrow } from '../../Classes/CJMLArrow';
+import styles from './ArrowComponent.module.css';
+
+interface ArrowComponentProps {
+  Arrows: CJMLArrow[];
+  currentObject: any;
+  setArrows: any;
+  setCurrentObject: any;
+  SwimlineMode: any;
+  layerEl:any;
+  actors:any;
+}
+
+function ArrowComponent(props: ArrowComponentProps) {
+
+  function getPoints(arrow: CJMLArrow) {
+    if ((arrow.fromPoint.x < arrow.toPoint.x - arrow.toPoint.width /2 || arrow.fromPoint.x > arrow.toPoint.x+ arrow.toPoint.width /2 ) && arrow.fromPoint.x  != arrow.toPoint.x ) {
+      return [arrow.fromPoint.x + arrow.fromPoint.width, arrow.fromPoint.y + arrow.fromPoint.height / 2].concat(arrow.intermidiate).concat([arrow.toPoint.height == 0? arrow.toPoint.x-arrow.toPoint.width:arrow.toPoint.x , arrow.toPoint.y + arrow.toPoint.height / 2]);
+    }
+    else {
+      return [arrow.toPoint.height == 0?arrow.fromPoint.x: arrow.fromPoint.x+ arrow.fromPoint.width/2 , arrow.fromPoint.y + arrow.fromPoint.height / 2].concat(arrow.intermidiate).concat([arrow.toPoint.height == 0?arrow.toPoint.x:arrow.toPoint.x+arrow.toPoint.width/2, arrow.toPoint.height == 0?arrow.toPoint.y-arrow.toPoint.width:arrow.toPoint.y]);
+    }
+  }
+
+  function render(arrow:CJMLArrow){
+    if(props.layerEl.current._lastPos == null)
+      return true;
+      if(props.layerEl.current._lastPos.x * -1 + 300 <arrow.fromPoint.x && props.layerEl.current._lastPos.x * -1 + props.layerEl.current.canvas.width > arrow.fromPoint.x){
+        return true;
+      }
+      if(props.layerEl.current._lastPos.x * -1 > props.actors[0].width-400 && props.actors[0].width-400  <=  arrow.toPoint.x-200 ){
+        return true
+      }
+      else return false;
+
+  }
+
+  return (<div>
+    {props.SwimlineMode && props.Arrows.map(arrow => {
+      if(render(arrow))
+      return (
+        <Arrow points={getPoints(arrow)}
+          stroke={props.currentObject.id == arrow.id ? 'Red' : '#7F7F7F'}
+          pointerWidth={7}
+          pointerLength={7}
+          onClick={() => {
+            props.setCurrentObject(arrow);
+          }}
+          hitStrokeWidth = {3}
+          strokeWidth={2}
+          fill={props.currentObject.id == arrow.id ? 'Red' : '#7F7F7F'}>
+
+        </Arrow>
+)
+    })}
+  </div>);
+}
+export default ArrowComponent;

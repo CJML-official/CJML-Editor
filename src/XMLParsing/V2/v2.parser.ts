@@ -1,0 +1,444 @@
+import { TouchPointStatus } from './../../enumerator/TouchPointStatus';
+import { CJMLArrow } from './../../Classes/CJMLArrow';
+import { CJMLAction } from './../../Classes/CJMLAction';
+import { CJMLCircle } from './../../Classes/CJMLCircle';
+import { Actors } from "../../Classes/Actors";
+import { Journey } from "../../Classes/Journey";
+import { randomColor } from 'accessible-colors';
+import { Comments } from '../../Classes/Comment';
+import { Experience } from '../../Classes/Experience';
+import { Blob } from 'buffer';
+
+
+function V2parse(file: Blob | string | ArrayBuffer | null, GetImage: any) {
+    function parseJourney(journey: HTMLCollection) {
+
+    }
+    var arrowId = 0;
+    var swimlaneXInitial = 400;
+
+    function getComments(xml: any) : any {
+        let comments = [];
+        if (xml.nodeType === Node.COMMENT_NODE) {
+            comments.push(xml.nodeValue as string);
+        }
+        for (let child of xml.childNodes) {
+            comments = comments.concat(getComments(child));
+        }
+        return comments;
+    }
+
+    function CleanFirst(lines: string[]) {
+        if(lines[0].length >= 25) {
+           return lines.slice(1).map((string) => string.trim());
+        }
+
+        return lines;
+    }
+
+    function getTouchPoint(touchpoint: Element, x: number) {
+        var id, init, initLabel, timestamp, receiver, receiverLabel, channel, compliance, phase;
+        id = getID(touchpoint, 'touchpointID');
+        init = getActorsattributeName(touchpoint.getElementsByTagName('initiator')[0].getElementsByTagName('refersTo')[0]);
+        receiver = getActorsattributeName(touchpoint.getElementsByTagName('receiver')[0].getElementsByTagName('refersTo')[0]);
+        initLabel = getID(touchpoint.getElementsByTagName('initiator')[0], 'initiatorLabel');
+        receiverLabel = getID(touchpoint.getElementsByTagName('receiver')[0], 'receiverLabel');
+        compliance = getStatus(getID(touchpoint, 'compliance'));
+        channel = getID(touchpoint.getElementsByTagName('channel')[0], 'channelName');
+        timestamp = getID(touchpoint.getElementsByTagName('timestamps')[0], 'timeConsumed');
+        phase = getAttributes(touchpoint.getElementsByTagName('belongsTo'));
+        let circle = new CJMLCircle(id, x, 0, false, id[0] == 'D' ? true : false, receiver.value, init.value, channel, receiverLabel, initLabel, swimlaneXInitial, 0, 0, timestamp, compliance, phase);
+        circle.Comment = new Comments(getID(touchpoint, 'comment'), false)
+        let experienceDescription = getID(touchpoint.getElementsByTagName('touchpointExperience')[0], 'experienceDescription');
+        // Replace "nan" string with empty string to avoid displaying "nan" text
+        experienceDescription = experienceDescription.toLowerCase() === 'nan' ? '' : experienceDescription;
+        circle.Experience = new Experience(experienceDescription)
+        return circle
+    }
+
+    function getAttributes(element: any) {
+        console.log(element[0])
+        try {
+            return element[0].getAttribute("phaseIDref")
+        }
+        catch {
+            return null
+        }
+    }
+
+    function getAction(action: Element, x: number, actors: Actors[]) {
+        var id, init, label, timestamp, phase;
+        id = getID(action, 'touchpointID');
+        init = getActorsattributeName(action.getElementsByTagName('initiator')[0].getElementsByTagName('refersTo')[0]);
+        label = getID(action.getElementsByTagName('initiator')[0], 'initiatorLabel');
+        timestamp = getID(action.getElementsByTagName('timestamps')[0], 'timeCompleted');
+        phase = getAttributes(action.getElementsByTagName('belongsTo'));
+        var actions = new CJMLAction(id, x, 0, false, label, id[0] == 'D' ? true : false, init.value, swimlaneXInitial, timestamp, phase);
+        actions.Comment = new Comments(getID(action, 'comment'), false)
+        let experienceDescription = getID(action.getElementsByTagName('touchpointExperience')[0], 'experienceDescription');
+        // Replace "nan" string with empty string to avoid displaying "nan" text
+        experienceDescription = experienceDescription.toLowerCase() === 'nan' ? '' : experienceDescription;
+        actions.Experience = new Experience(experienceDescription)
+        return actions
+    }
+
+    function getStatus(status: string) {
+        if (status == "") {
+            return TouchPointStatus.Completed
+        }
+        else if (status == "adhoc") {
+            return TouchPointStatus.AdHoc;
+        }
+        else if (status == "failing") {
+            return TouchPointStatus.Failing;
+        }
+        else if (status == "missing") {
+            return TouchPointStatus.Missing;
+        }
+        else {
+            return TouchPointStatus.Completed;
+        }
+    }
+
+    function getID(action: Element, tagName: string) {
+        if (action != undefined)
+            return action.getElementsByTagName(tagName).length != 0 ? action.getElementsByTagName(tagName)[0].innerHTML : "";
+        return '';
+    }
+
+    function setTouchPointMetadata(actors: Actors[], node: CJMLCircle) {
+        let nodeTemp = node;
+        nodeTemp.receiver = actors.find(x => {
+            return x.id == node.receiver
+        });
+        nodeTemp.initiator = actors.find(x => {
+            return x.id == node.initiator
+        });
+        let yValue = nodeTemp.initiator.isEndUser ? nodeTemp.initiator : nodeTemp.receiver;
+        nodeTemp.y = yValue.y + yValue.height / 2;
+        nodeTemp.swimlaneY = nodeTemp.initiator.y + 20;
+        nodeTemp.swimlaneReceiverY = nodeTemp.receiver.y + 20;
+        return nodeTemp;
+    }
+
+    function setActionMetadata(actors: Actors[], node: CJMLAction) {
+        let nodeTemp = node;
+        nodeTemp.initiator = actors.find(x => {
+            return x.id == node.initiator
+        });
+        nodeTemp.y = nodeTemp.initiator.y + 20;
+        return nodeTemp;
+    }
+
+    function actualJourney(journey: HTMLCollection, actors: any) {
+        let journeyNew = new Journey();
+        let previousInteraction = null;
+        journeyNew.Actors = actors;
+        let x = 350;
+        let devationMove = 170;
+        let firstDevation = false;
+
+        for (var i = 0; i < journey.length; i++) {
+            console.log("Pradedu touch");
+            if (journey[i].tagName == 'actualAction') {
+
+                let action = getAction(journey[i], x - 180, actors);
+                swimlaneXInitial += 225;
+                action = setActionMetadata(actors, action);
+                const resolvedActionImage = GetImage(action.imageName, "Other");
+                action.imageName = resolvedActionImage && resolvedActionImage.toLowerCase().includes('.svg') ? resolvedActionImage : action.imageName;
+                action.phase = getAttributes(journey[i].getElementsByTagName('belongsTo'));
+                if (!action.devation) {
+                    x += 150;
+                    devationMove = 170;
+                    firstDevation = false;
+                }
+                else {
+                    if (!firstDevation && x > 350) {
+                        x -= 150;
+                        firstDevation = true;
+                    }
+                    action.y += devationMove;
+                    devationMove += 120;
+                }
+                journeyNew.Actions.push(action);
+                if (previousInteraction != null) {
+                    let arrowsInfo = CreatArrow(previousInteraction, action);
+                    arrowsInfo.Draw();
+                    journeyNew.Arrow.push(arrowsInfo);
+                }
+                previousInteraction = action;
+            }
+            else if (journey[i].tagName == 'actualCommunicationPoint') {
+                let touchpoint = getTouchPoint(journey[i], x);
+                swimlaneXInitial += 225;
+                touchpoint = setTouchPointMetadata(actors, touchpoint);
+                const resolvedTouchpointImage = GetImage(touchpoint.imageName, "Other");
+                touchpoint.imageName = resolvedTouchpointImage && resolvedTouchpointImage.toLowerCase().includes('.svg') ? resolvedTouchpointImage : touchpoint.imageName;
+                touchpoint.imageNameReceiver = touchpoint.imageName;
+                touchpoint.phase = getAttributes(journey[i].getElementsByTagName('belongsTo'));
+                console.log(touchpoint);
+                if (!touchpoint.devation) {
+                    x += 150;
+                    devationMove = 170;
+                    firstDevation = false;
+                }
+                else {
+                    if (!firstDevation && x > 350) {
+                        firstDevation = true;
+                    }
+                    touchpoint.y += devationMove;
+                    devationMove += 120;
+                    touchpoint.x = firstDevation ? touchpoint.x - 150 : touchpoint.x;
+                }
+                journeyNew.Toucpoint.push(touchpoint);
+                if (previousInteraction != null) {
+                    let arrowsInfo = CreatArrow(previousInteraction, touchpoint);
+                    arrowsInfo.Draw();
+                    journeyNew.Arrow.push(arrowsInfo);
+                }
+                previousInteraction = touchpoint;
+            }
+        }
+        journeyNew.Actors.forEach((y: Actors) => {
+            y.width = swimlaneXInitial;
+        })
+        return journeyNew;
+    }
+
+    function CreatArrow(previousNode: any, CurrentNode: any) {
+        return new CJMLArrow(arrowId++, previousNode, CurrentNode);
+    }
+    function PlannedJourney(journey: HTMLCollection, actors: any) {
+        let journeyNew = new Journey();
+        swimlaneXInitial = 425;
+        journeyNew.Actors = actors;
+        let x = 400;
+        let previousInteraction = null;
+        for (var i = 0; i < journey.length; i++) {
+            if (journey[i].tagName == 'plannedAction') {
+                let action = getAction(journey[i], x, actors);
+                swimlaneXInitial += 250;
+                action = setActionMetadata(actors, action);
+                const resolvedPlannedActionImage = GetImage(action.imageName, "Other");
+                action.imageName = resolvedPlannedActionImage && resolvedPlannedActionImage.toLowerCase().includes('.svg') ? resolvedPlannedActionImage : action.imageName;
+                if (!action.devation) x += 150;
+                journeyNew.Actions.push(action);
+                if (previousInteraction != null) {
+                    let arrowsInfo = CreatArrow(previousInteraction, action);
+                    arrowsInfo.Draw();
+                    journeyNew.Arrow.push(arrowsInfo);
+                }
+                previousInteraction = action;
+
+            }
+            else if (journey[i].tagName == 'plannedCommunicationPoint') {
+                let touchpoint = getTouchPoint(journey[i], x);
+                swimlaneXInitial += 225;
+                touchpoint = setTouchPointMetadata(actors, touchpoint);
+                const resolvedPlannedTouchpointImage = GetImage(touchpoint.imageName, "Other");
+                touchpoint.imageName = resolvedPlannedTouchpointImage && resolvedPlannedTouchpointImage.toLowerCase().includes('.svg') ? resolvedPlannedTouchpointImage : touchpoint.imageName;
+                touchpoint.imageNameReceiver = touchpoint.imageName;
+                if (!touchpoint.devation) x += 150;
+                journeyNew.Toucpoint.push(touchpoint);
+                if (previousInteraction != null) {
+                    let arrowsInfo = CreatArrow(previousInteraction, touchpoint);
+                    arrowsInfo.Draw();
+
+                    journeyNew.Arrow.push(arrowsInfo);
+                }
+                previousInteraction = touchpoint;
+            }
+        }
+        journeyNew.Actors.forEach((y: Actors) => {
+            y.width = swimlaneXInitial;
+        })
+        return journeyNew;
+    }
+    function getActorsattributeName(actors: any) {
+        var name = actors.attributes.getNamedItem("actorID");
+        if (name == null) {
+            name = actors.attributes.getNamedItem("actorIDref");
+        }
+        return name;
+    }
+
+    function getColorFromTheList(defaultColors: any, actorType: string) {
+        if (actorType != "endUser") {
+            if (defaultColors["other"].length > 0)
+                return defaultColors["other"].shift();
+            else
+                return randomColor();
+        }
+        else if (actorType == "endUser") {
+            if (defaultColors["endUser"].length > 0)
+                return defaultColors["endUser"].shift();
+            else
+                return randomColor();
+        }
+    }
+
+    function getIconByNodeName(nodeName: string): string {
+        const iconMap: { [key: string]: string } = {
+            "endUser": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\user-3.svg",
+            "enduser": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\user-3.svg",
+            "customer": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\user-3.svg",
+            "citizen": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\user-3.svg",
+            "user": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\user-3.svg",
+            "serviceProvider": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\service-provider-1.svg",
+            "HealthCareServiceProvider": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJMl symbols - health care\\doctor-1.svg",
+            "patient": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJMl symbols - actors\\patient-1.svg",
+            "employee": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\employee-1.svg",
+            "external": "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\service-provider-5.svg"
+        };
+
+        return iconMap[nodeName] || "\\CJML v1.1 - Graphical elements - PNG SVG\\Symbols - SVG\\CJML symbols - actors\\user-3.svg";
+    }
+
+    function parseActors(actors: HTMLCollection, comment: string[]) {
+        var actorsList: any[] = [];
+        var defaultColors = {
+            "endUser": ["#E46C0A"],
+            "other": ["#3BA0BB", "#77933C", "#B3A2C7"],
+            "doctor": ["#B7DEE8"],
+            "patient": ["#31859C"]
+        }
+        let yLocation = 200;
+        for (var i = 0; i < actors.length; i++) {
+            var name = getActorsattributeName(actors[i]).nodeValue;
+            var Title = getActorsName(actors[i]);
+            var iconPath = getIconByNodeName(actors[i].nodeName);
+            var image = GetImage(iconPath, comment.length > 0 ? comment[i] : "Actor");
+            if (!image || !image.toLowerCase().includes('.svg')) {
+                image = iconPath;
+            }
+            var color = getColorFromTheList(defaultColors, actors[i].nodeName);
+            const actorEntrie = new Actors(Title == null ? name : Title, name, image, yLocation, 200, 700, 130, actors[i].nodeName == 'endUser' ? true : false);
+            actorEntrie.color = color;
+            yLocation += 200;
+            actorsList.push(actorEntrie);
+        }
+        return actorsList;
+    }
+    function realJourneyPaserActors(actors: HTMLCollection, plannedActors: Actors[], comments:string[]) {
+        let act = parseActors(journey[i].getElementsByTagName('actors')[0].children, comments);
+        return mergeActors(act, plannedActors);
+    }
+
+    function mergeActors(actors: Actors[], plannedActors: Actors[]) {
+        let endUserId = 0;
+
+        let result = actors.map((x: Actors) => {
+            if (x.isEndUser) {
+                let match = plannedActors.filter(y => {
+                    return y.isEndUser
+                })[endUserId];
+                if (match != undefined) {
+
+                    endUserId++;
+                    x.color = match.color;
+                    x.img = match.img;
+                    return x;
+                }
+            }
+            else {
+                let match = plannedActors.filter(y => {
+                    return x.id == y.id
+                })[0];
+                if (match != undefined) {
+
+                    x.color = match.color;
+                    x.img = match.img;
+                    return x;
+                }
+            }
+            return x;
+        })
+        return result;
+    }
+
+    function getImageOfActor(node: any) {
+        if (node.getElementsByTagName("providerType").length > 0) {
+            return node.getElementsByTagName("providerType")[0].innerHTML;
+        }
+        return null;
+    }
+    function getActorsName(node: any) {
+
+        if (node.getElementsByTagName("actorName").length != 0) {
+            return node.getElementsByTagName("actorName")[0].innerHTML;
+        }
+        else if (node.getElementsByTagName("companyName").length != 0) {
+            return node.getElementsByTagName("companyName")[0].innerHTML;
+        }
+        else {
+            return null;
+        }
+    }
+
+    function getJourneyName(value: any) {
+        return value.innerHTML
+    }
+
+    var parser = new DOMParser();
+    var journeys: Journey[] = [];
+
+    if (file != null) {
+        var xmlDoc = parser.parseFromString(file.toString(), "text/xml");
+        var comment = getComments(xmlDoc);
+        comment = CleanFirst(comment);
+        var journey = xmlDoc.getElementsByTagName('plannedJourney');
+        let journeysToAdd;
+        let initialJourneyAct;
+        for (var i = 0; i < journey.length; i++) {
+            let nameJourney = getJourneyName(journey[i].getElementsByTagName('journeyID')[0])
+            let actPlanned = parseActors(journey[i].getElementsByTagName('actors')[0].children, comment); // external
+
+            if (i == 0) initialJourneyAct = actPlanned;
+            if (i > 0) {
+                actPlanned = mergeActors(actPlanned, initialJourneyAct == undefined ? [] : initialJourneyAct);
+            }
+            journeysToAdd = PlannedJourney(journey[i].getElementsByTagName('touchpoints')[0].children, actPlanned);
+            journeysToAdd.JourneyName = nameJourney;
+            journeysToAdd.isPlanned = true;
+            journeys.push(journeysToAdd);
+        }
+        journey = xmlDoc.getElementsByTagName('actualJourney');
+        for (var i = 0; i < journey.length; i++) {
+            swimlaneXInitial = 400;
+            let nameJourney = getJourneyName(journey[i].getElementsByTagName('journeyID')[0])
+            let reference = "";
+            let description = "";
+            try {
+                reference = getJourneyName(journey[i].getElementsByTagName('plannedReference')[0])
+            }
+            catch (ex) {
+
+            }
+            try {
+                description = getJourneyName(journey[i].getElementsByTagName('journeyShortSummary')[0])
+            }
+            catch (ex) {
+
+            }
+            let act;
+            if (journeys.length > 0 && journeys.filter((x: Journey) => { return x.isPlanned == true }).length > 0) {
+                act = realJourneyPaserActors(journey[i].getElementsByTagName('actors')[0].children, journeys[0].Actors, comment);
+            }
+            if (journeys.length == 0 || journeys.filter((x: Journey) => { return x.isPlanned == true }).length == 0) {
+                console.log(journey[i].getElementsByTagName('actors'))
+                console.log(journey[i].getElementsByTagName('actors')[0].children)
+                act = parseActors(journey[i].getElementsByTagName('actors')[0].children, comment);
+            }
+            // merge actors with planned to get images, and use them from Planned 
+            journeysToAdd = actualJourney(journey[i].getElementsByTagName('touchpoints')[0].children, act);
+            journeysToAdd.JourneyName = nameJourney;
+            journeysToAdd.Reference = reference;
+            journeysToAdd.JourneyDescription = description;
+            journeys.push(journeysToAdd);
+        }
+    }
+    return journeys;
+}
+
+export default V2parse;

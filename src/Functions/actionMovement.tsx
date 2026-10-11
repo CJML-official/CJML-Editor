@@ -1,0 +1,64 @@
+import { Actors } from "../Classes/Actors";
+import { CJMLAction } from "../Classes/CJMLAction";
+import { CJMLCircle } from "../Classes/CJMLCircle";
+import {collisionSwim, moveElement, moveJourneyElement} from "../Functions/Movement"
+export function onActionDragEnd(e: any, touchPoint: any, actors: Actors[], Action: CJMLAction[], SwimlineMode: boolean, updateCircles: any, changeArrow: any, elementsAreFarFromBorder: any, circles: CJMLCircle[], setActions: any, index: any, isPlanned: boolean,
+   arrowId:any, setArrowId:any, setArrows:any,typeOfJourney:boolean, phase?:any) {
+   
+      let yPosOfMouse
+      let xPosOfMouse
+      if (e.target.attrs.y != null) {
+        yPosOfMouse = e.target.attrs.y;
+        xPosOfMouse = e.target.attrs.x;
+      }
+      else {
+        yPosOfMouse = e.target.getStage().getPointerPosition().y;
+        xPosOfMouse = e.target.getStage().getPointerPosition().x;
+      }
+     
+      var actorIn: Actors | undefined = collisionSwim(yPosOfMouse, touchPoint, actors);
+      if (actorIn != undefined) {
+        const circles2 = Action.map(circle => {
+          if (circle.id == touchPoint.id) {
+            if(SwimlineMode ){
+              if( actorIn != undefined && !actorIn.isEndUser){
+                actorIn = circle.initiator
+              }}
+              let differnce = SwimlineMode?36:20
+              return { ...circle, initiator: actorIn, y: actorIn != undefined ? actorIn.y + differnce : 200};
+          }
+          return circle;
+        })
+        setActions(circles2);
+        changeArrow(e, touchPoint.id, circles2.filter(y => y.id == touchPoint.id)[0]);
+        typeOfJourney?moveJourneyElement(circles, index, xPosOfMouse, circles2, updateCircles, setActions,arrowId, setArrowId, setArrows) :moveElement(circles, index, xPosOfMouse, circles2, updateCircles, setActions,arrowId, setArrowId, setArrows,typeOfJourney);
+      } else {
+        typeOfJourney?moveJourneyElement(circles, index, xPosOfMouse, Action, updateCircles, setActions,arrowId, setArrowId, setArrows) :moveElement(circles, index, xPosOfMouse, Action, updateCircles, setActions,arrowId, setArrowId, setArrows,typeOfJourney);
+      }
+  }
+
+  export function onActionDragMove(e: any, Circle: CJMLCircle[], touchPoint: any, updateCircles: any, changeArrow: any, elementsAreFarFromBorder: any, index: any,
+     elementCheckCloseToBorder: any, actions: CJMLAction[], setActions: any, actors: any,SwimlineMode: boolean, isPlanned:any, arrowId:any, setArrowId:any, setArrows:any, typeOfJourney:any) {
+
+    const circles = actions.map(circle => {
+      if (circle.id == touchPoint.id) {
+        return { ...circle, swimlaneX: e.target.getPosition().x, y: e.target.getPosition().y, x:  e.target.getPosition().x};
+      }
+      return circle;
+    })
+    var actorIn: Actors | undefined = collisionSwim(e, touchPoint, actors); // fix colision
+    if (actorIn != undefined) {
+      const circles = actions.map(circle => {
+        if (circle.id == touchPoint.id) {
+          return { ...circle, y: actorIn != undefined ? actorIn.y - actorIn.height / 2 : 200, };
+        }
+        return circle;
+      })
+      setActions(circles);
+      changeArrow(e, touchPoint.id, circles.filter(y => y.id == touchPoint.id)[0]);
+    }
+    changeArrow(e, touchPoint.id, circles.filter(y => y.id == touchPoint.id)[0]);
+    moveElement(Circle, index, e.target.attrs.x, actions, updateCircles, setActions, arrowId, setArrowId, setArrows,typeOfJourney);
+    setActions(circles);
+    //elementCheckCloseToBorder(e.target.getPosition().x);
+  }
